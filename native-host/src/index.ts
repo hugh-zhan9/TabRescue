@@ -7,8 +7,10 @@
 
 import { stdin, stdout } from 'process';
 import { StorageManager } from './storage/StorageManager.js';
+import { getNativeHostLogPath, logNativeHost } from './logger.js';
 
 const storageManager = new StorageManager();
+let shuttingDown = false;
 
 // 读取消息的缓冲区
 let buffer = Buffer.alloc(0);
@@ -40,6 +42,7 @@ async function readMessage(): Promise<any | null> {
         resolve(message);
       } catch (err) {
         console.error('[NativeHost] Parse error:', err);
+        logNativeHost('parse_error', err);
         resolve(null);
       }
     } else {
@@ -58,6 +61,8 @@ function processData(data: Buffer) {
       const message = await readMessage();
       if (message) {
         await handleCommand(message);
+        await shutdownHost(0);
+        return;
       } else {
         break;
       }
@@ -66,32 +71,87 @@ function processData(data: Buffer) {
 }
 
 // 发送响应
-function sendResponse(response: any) {
+function sendResponse(response: any): Promise<void> {
   const messageBuffer = Buffer.from(JSON.stringify(response), 'utf8');
   const lengthBuffer = Buffer.alloc(4);
   lengthBuffer.writeUInt32LE(messageBuffer.length, 0);
 
-  stdout.write(lengthBuffer);
-  stdout.write(messageBuffer);
+  return new Promise((resolve, reject) => {
+    stdout.write(lengthBuffer, (lengthError) => {
+      if (lengthError) {
+        reject(lengthError);
+        return;
+      }
+
+      stdout.write(messageBuffer, (messageError) => {
+        if (messageError) {
+          reject(messageError);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  });
+}
+
+async function shutdownHost(code: number) {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+
+  try {
+    await storageManager.shutdown();
+    logNativeHost('shutdown_complete', { code });
+  } catch (error) {
+    logNativeHost('shutdown_error', error);
+  }
+
+  stdout.end(() => {
+    process.exit(code);
+  });
 }
 
 // 处理命令
 async function handleCommand(command: any) {
-  const { action, params } = command;
+  const { action, params, context } = command;
+  storageManager.setBrowserScope(context?.browserScope);
+  logNativeHost('handle_command', {
+    action,
+    context,
+    storage: params?.settings?.storage
+      ? {
+          level: params.settings.storage.level,
+          remoteType: params.settings.storage.remoteType,
+          sqlitePath: params.settings.storage.sqlite?.path || null,
+          postgresql: params.settings.storage.postgresql
+            ? {
+                host: params.settings.storage.postgresql.host,
+                port: params.settings.storage.postgresql.port,
+                database: params.settings.storage.postgresql.database,
+                user: params.settings.storage.postgresql.user,
+                ssl: params.settings.storage.postgresql.ssl || false,
+              }
+            : undefined,
+          mysql: params.settings.storage.mysql
+            ? {
+                host: params.settings.storage.mysql.host,
+                port: params.settings.storage.mysql.port,
+                database: params.settings.storage.mysql.database,
+                user: params.settings.storage.mysql.user,
+                ssl: params.settings.storage.mysql.ssl || false,
+              }
+            : undefined,
+        }
+      : undefined,
+  });
 
   try {
     let result;
 
     switch (action) {
-      case 'get_current_session':
-        result = await storageManager.getCurrentSession();
-        break;
-
-      case 'save_current_session':
-        await storageManager.saveCurrentSession(params.session);
-        result = { success: true };
-        break;
-
       case 'get_snapshots':
         result = await storageManager.getSnapshots(params.limit);
         break;
@@ -114,6 +174,10 @@ async function handleCommand(command: any) {
         result = await storageManager.getSettings();
         break;
 
+      case 'get_popup_state':
+        result = await storageManager.getPopupState(params.limit);
+        break;
+
       case 'save_settings':
         await storageManager.saveSettings(params.settings);
         result = { success: true };
@@ -128,9 +192,14 @@ async function handleCommand(command: any) {
         throw new Error(`Unknown action: ${action}`);
     }
 
-    sendResponse({ action, success: true, data: result });
+    await sendResponse({ action, success: true, data: result });
+    logNativeHost('handle_command_success', { action });
   } catch (error) {
-    sendResponse({
+    logNativeHost('handle_command_error', {
+      action,
+      error,
+    });
+    await sendResponse({
       action,
       success: false,
       error: (error as Error).message,
@@ -141,6 +210,7 @@ async function handleCommand(command: any) {
 // 主循环
 async function main() {
   console.error('[NativeHost] Starting...');
+  logNativeHost('starting', { logPath: getNativeHostLogPath() });
 
   // 初始化存储
   await storageManager.initialize();
@@ -152,15 +222,21 @@ async function main() {
 
   stdin.on('end', () => {
     console.error('[NativeHost] Connection closed');
-    process.exit(0);
+    logNativeHost('connection_closed');
+    void shutdownHost(0);
   });
 
   stdin.on('error', (err) => {
     console.error('[NativeHost] stdin error:', err);
-    process.exit(1);
+    logNativeHost('stdin_error', err);
+    void shutdownHost(1);
   });
 
   console.error('[NativeHost] Ready');
+  logNativeHost('ready');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  logNativeHost('fatal_error', error);
+  console.error(error);
+});

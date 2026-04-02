@@ -1,9 +1,7 @@
 {
-  "name": "com.tabrescue.native-host",
+  "name": "com.tabrescue.native_host",
   "description": "Native host for TabRescue browser extension",
   "path": "__INSTALL_PATH__",
   "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://__EXTENSION_ID__/"
-  ]
+  "allowed_origins": []
 }

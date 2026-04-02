@@ -1,23 +1,34 @@
 import { Snapshot, SnapshotDetail, SnapshotSummary, CurrentSession, TabData } from '../types';
 import { StorageRepository } from '../repository/types';
 
+export interface SessionSnapshotSource {
+  getCurrentSession(): CurrentSession | null;
+  fullCapture(): Promise<CurrentSession>;
+}
+
 /**
  * 快照服务
  * 负责快照的生成、管理和清理
  */
 export class SnapshotService {
   private repository: StorageRepository;
+  private readonly sessionSource: SessionSnapshotSource;
 
-  constructor(repository: StorageRepository) {
+  constructor(repository: StorageRepository, sessionSource: SessionSnapshotSource) {
     this.repository = repository;
+    this.sessionSource = sessionSource;
   }
 
   /**
    * 创建快照
-   * 从 currentSession 复制数据到 snapshots 归档
+   * 从 extension 内存态复制数据到 snapshots 归档
    */
-  public async createSnapshot(): Promise<Snapshot> {
-    const session = await this.repository.getCurrentSession();
+  public async createSnapshot(options?: { refreshCurrentState?: boolean }): Promise<Snapshot> {
+    if (options?.refreshCurrentState) {
+      await this.sessionSource.fullCapture();
+    }
+
+    const session = this.sessionSource.getCurrentSession();
     if (!session) {
       throw new Error('No current session to snapshot');
     }
@@ -45,14 +56,14 @@ export class SnapshotService {
       windowCount: session.windows.length,
       tabCount: activeTabs.length,
       summary: this.generateSummary(session, windowTabs, now),
-      windows: session.windows,
-      tabs: activeTabs,
+      windows: session.windows.map((window) => ({ ...window })),
+      tabs: activeTabs.map((tab) => ({ ...tab })),
     };
 
     await this.repository.saveSnapshot(snapshot);
 
     // 清理过期快照
-    await this.cleanupOldSnapshots();
+    await this.enforceSnapshotLimit();
 
     return snapshot;
   }
@@ -105,13 +116,13 @@ export class SnapshotService {
   /**
    * 清理过期快照
    */
-  private async cleanupOldSnapshots() {
-    const settings = await this.repository.getSettings();
-    const maxSnapshots = settings.snapshot?.maxSnapshots || 20;
+  public async enforceSnapshotLimit(maxSnapshots?: number) {
+    const configuredLimit = (await this.repository.getSettings()).snapshot?.maxSnapshots;
+    const limit = maxSnapshots ?? configuredLimit ?? 20;
 
     const snapshots = await this.getSnapshots(100);
-    if (snapshots.length > maxSnapshots) {
-      const toDelete = snapshots.slice(maxSnapshots);
+    if (snapshots.length > limit) {
+      const toDelete = snapshots.slice(limit);
       for (const snapshot of toDelete) {
         await this.deleteSnapshot(snapshot.id);
       }

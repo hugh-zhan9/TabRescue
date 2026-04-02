@@ -21,6 +21,7 @@ export interface Settings {
   };
   storage: {
     level: StorageLevel;
+    remoteType?: 'postgresql' | 'mysql';
     sqlite?: { path: string };
     postgresql?: DbConfig;
     mysql?: DbConfig;
@@ -55,7 +56,7 @@ export interface TabData {
   deletedAt?: number | null;
 }
 
-/** 当前会话（实时主数据） */
+/** 当前会话（扩展内存态） */
 export interface CurrentSession {
   id: 'singleton';
   updatedAt: number;

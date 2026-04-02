@@ -7,16 +7,81 @@ interface SettingsProps {
   onSave: () => void;
 }
 
+const defaultSettings: SettingsType = {
+  dedup: { strategy: 'per-window' },
+  storage: {
+    level: 1,
+    remoteType: 'postgresql',
+    sqlite: { path: '' },
+    postgresql: {
+      host: 'localhost',
+      port: 5432,
+      database: 'tabrescue',
+      user: 'postgres',
+      password: '',
+      ssl: false,
+    },
+    mysql: {
+      host: 'localhost',
+      port: 3306,
+      database: 'tabrescue',
+      user: 'root',
+      password: '',
+      ssl: false,
+    },
+  },
+  snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
+  ui: { showRecoveryPromptOnStartup: false },
+};
+
+function normalizeSettings(value?: Partial<SettingsType>): SettingsType {
+  const normalizedPostgresql = {
+    host: value?.storage?.postgresql?.host ?? defaultSettings.storage.postgresql!.host,
+    port: value?.storage?.postgresql?.port ?? defaultSettings.storage.postgresql!.port,
+    database: value?.storage?.postgresql?.database ?? defaultSettings.storage.postgresql!.database,
+    user: value?.storage?.postgresql?.user ?? defaultSettings.storage.postgresql!.user,
+    password: value?.storage?.postgresql?.password ?? defaultSettings.storage.postgresql!.password,
+    ssl: value?.storage?.postgresql?.ssl ?? defaultSettings.storage.postgresql!.ssl,
+  };
+
+  const normalizedMysql = {
+    host: value?.storage?.mysql?.host ?? defaultSettings.storage.mysql!.host,
+    port: value?.storage?.mysql?.port ?? defaultSettings.storage.mysql!.port,
+    database: value?.storage?.mysql?.database ?? defaultSettings.storage.mysql!.database,
+    user: value?.storage?.mysql?.user ?? defaultSettings.storage.mysql!.user,
+    password: value?.storage?.mysql?.password ?? defaultSettings.storage.mysql!.password,
+    ssl: value?.storage?.mysql?.ssl ?? defaultSettings.storage.mysql!.ssl,
+  };
+
+  return {
+    dedup: {
+      strategy: value?.dedup?.strategy ?? defaultSettings.dedup.strategy,
+    },
+    storage: {
+      level: value?.storage?.level ?? defaultSettings.storage.level,
+      remoteType: value?.storage?.remoteType ?? (value?.storage?.mysql ? 'mysql' : 'postgresql'),
+      sqlite: {
+        path: value?.storage?.sqlite?.path ?? defaultSettings.storage.sqlite?.path ?? '',
+      },
+      postgresql: normalizedPostgresql,
+      mysql: normalizedMysql,
+    },
+    snapshot: {
+      maxSnapshots: value?.snapshot?.maxSnapshots ?? defaultSettings.snapshot.maxSnapshots,
+      autoSaveInterval: value?.snapshot?.autoSaveInterval ?? defaultSettings.snapshot.autoSaveInterval,
+    },
+    ui: {
+      showRecoveryPromptOnStartup:
+        value?.ui?.showRecoveryPromptOnStartup ?? defaultSettings.ui.showRecoveryPromptOnStartup,
+    },
+  };
+}
+
 /**
  * 设置页面组件
  */
 export default function Settings({ onBack, onSave }: SettingsProps) {
-  const [settings, setSettings] = useState<SettingsType>({
-    dedup: { strategy: 'per-window' },
-    storage: { level: 1 },
-    snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
-    ui: { showRecoveryPromptOnStartup: false },
-  });
+  const [settings, setSettings] = useState<SettingsType>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +96,7 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
       const request: BackgroundRequest = { action: 'getSettings' };
       const response = await chrome.runtime.sendMessage(request) as GetSettingsResponse;
       if (response.success) {
-        setSettings(response.data);
+        setSettings(normalizeSettings(response.data));
         setLoadError(null);
       } else {
         setLoadError(response.error || '加载设置失败');
@@ -61,6 +126,33 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
       setSaving(false);
     }
   }
+
+  function updateStorageLevel(level: 1 | 2 | 3) {
+    setSettings({
+      ...settings,
+      storage: {
+        ...settings.storage,
+        level,
+        remoteType: settings.storage.remoteType || 'postgresql',
+        sqlite: settings.storage.sqlite || defaultSettings.storage.sqlite,
+        postgresql: settings.storage.postgresql || defaultSettings.storage.postgresql,
+        mysql: settings.storage.mysql || defaultSettings.storage.mysql,
+      },
+    });
+  }
+
+  function updateRemoteType(remoteType: 'postgresql' | 'mysql') {
+    setSettings({
+      ...settings,
+      storage: {
+        ...settings.storage,
+        level: 3,
+        remoteType,
+      },
+    });
+  }
+
+  const remoteType = settings.storage.remoteType || 'postgresql';
 
   if (loading) {
     return (
@@ -170,9 +262,9 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
           </div>
         </section>
 
-        {/* 存储级别 */}
+        {/* 数据源设置 */}
         <section className="setting-section">
-          <h2 className="section-title">💾 存储级别</h2>
+          <h2 className="section-title">💾 数据源</h2>
           <div className="setting-item">
             <label>
               <input
@@ -180,15 +272,12 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
                 name="storage"
                 value="1"
                 checked={settings.storage.level === 1}
-                onChange={() =>
-                  setSettings({
-                    ...settings,
-                    storage: { ...settings.storage, level: 1 },
-                  })
-                }
+                onChange={() => updateStorageLevel(1)}
               />
-              <strong>Level 1 - 浏览器存储</strong>
-              <p className="hint">使用 chrome.storage，数据保存在浏览器本地</p>
+              <div className="radio-content">
+                <strong>浏览器本地存储</strong>
+                <p className="hint">Level 1，使用浏览器扩展存储，零配置即可用。</p>
+              </div>
             </label>
           </div>
           <div className="setting-item">
@@ -198,16 +287,35 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
                 name="storage"
                 value="2"
                 checked={settings.storage.level === 2}
-                onChange={() =>
-                  setSettings({
-                    ...settings,
-                    storage: { ...settings.storage, level: 2 },
-                  })
-                }
+                onChange={() => updateStorageLevel(2)}
               />
-              <strong>Level 2 - SQLite 本地数据库</strong>
-              <p className="hint">使用本地 SQLite 数据库，支持更大数据量（需安装 Native Host）</p>
+              <div className="radio-content">
+                <strong>本地 SQLite 数据库</strong>
+                <p className="hint">Level 2，适合大容量本机存储，需要安装 Native Host。</p>
+              </div>
             </label>
+            {settings.storage.level === 2 && (
+              <div className="setting-subpanel">
+                <div className="setting-field">
+                  <span className="setting-field-label">SQLite 路径</span>
+                  <input
+                    type="text"
+                    className="input"
+                    value={settings.storage.sqlite?.path || ''}
+                    placeholder="留空则使用宿主默认路径"
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        storage: {
+                          ...settings.storage,
+                          sqlite: { path: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div className="setting-item">
             <label>
@@ -216,16 +324,291 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
                 name="storage"
                 value="3"
                 checked={settings.storage.level === 3}
-                onChange={() =>
-                  setSettings({
-                    ...settings,
-                    storage: { ...settings.storage, level: 3 },
-                  })
-                }
+                onChange={() => updateStorageLevel(3)}
               />
-              <strong>Level 3 - 云端数据库</strong>
-              <p className="hint">支持 PostgreSQL/MySQL，多设备同步（需配置数据库连接）</p>
+              <div className="radio-content">
+                <strong>远程数据库</strong>
+                <p className="hint">Level 3，支持 PostgreSQL 或 MySQL，适合跨设备同步。</p>
+              </div>
             </label>
+            {settings.storage.level === 3 && (
+              <div className="setting-subpanel">
+                <div className="setting-inline-choice">
+                  <label className="choice-pill">
+                    <input
+                      type="radio"
+                      name="remoteType"
+                      value="postgresql"
+                      checked={remoteType === 'postgresql'}
+                      onChange={() => updateRemoteType('postgresql')}
+                    />
+                    <span>PostgreSQL</span>
+                  </label>
+                  <label className="choice-pill">
+                    <input
+                      type="radio"
+                      name="remoteType"
+                      value="mysql"
+                      checked={remoteType === 'mysql'}
+                      onChange={() => updateRemoteType('mysql')}
+                    />
+                    <span>MySQL</span>
+                  </label>
+                </div>
+
+                {remoteType === 'postgresql' && (
+                  <div className="setting-grid">
+                    <div className="setting-field">
+                      <span className="setting-field-label">主机</span>
+                      <input
+                        type="text"
+                        className="input"
+                        value={settings.storage.postgresql?.host || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              postgresql: {
+                                ...settings.storage.postgresql!,
+                                host: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field">
+                      <span className="setting-field-label">端口</span>
+                      <input
+                        type="number"
+                        className="input"
+                        value={settings.storage.postgresql?.port || 5432}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              postgresql: {
+                                ...settings.storage.postgresql!,
+                                port: parseInt(e.target.value, 10) || 5432,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field">
+                      <span className="setting-field-label">数据库</span>
+                      <input
+                        type="text"
+                        className="input"
+                        value={settings.storage.postgresql?.database || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              postgresql: {
+                                ...settings.storage.postgresql!,
+                                database: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field">
+                      <span className="setting-field-label">用户名</span>
+                      <input
+                        type="text"
+                        className="input"
+                        value={settings.storage.postgresql?.user || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              postgresql: {
+                                ...settings.storage.postgresql!,
+                                user: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field setting-field-full">
+                      <span className="setting-field-label">密码</span>
+                      <input
+                        type="password"
+                        className="input"
+                        value={settings.storage.postgresql?.password || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              postgresql: {
+                                ...settings.storage.postgresql!,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <label className="checkbox-line setting-field-full">
+                      <input
+                        type="checkbox"
+                        checked={settings.storage.postgresql?.ssl || false}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              postgresql: {
+                                ...settings.storage.postgresql!,
+                                ssl: e.target.checked,
+                              },
+                            },
+                          })
+                        }
+                      />
+                      使用 SSL/TLS
+                    </label>
+                  </div>
+                )}
+
+                {remoteType === 'mysql' && (
+                  <div className="setting-grid">
+                    <div className="setting-field">
+                      <span className="setting-field-label">主机</span>
+                      <input
+                        type="text"
+                        className="input"
+                        value={settings.storage.mysql?.host || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              mysql: {
+                                ...settings.storage.mysql!,
+                                host: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field">
+                      <span className="setting-field-label">端口</span>
+                      <input
+                        type="number"
+                        className="input"
+                        value={settings.storage.mysql?.port || 3306}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              mysql: {
+                                ...settings.storage.mysql!,
+                                port: parseInt(e.target.value, 10) || 3306,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field">
+                      <span className="setting-field-label">数据库</span>
+                      <input
+                        type="text"
+                        className="input"
+                        value={settings.storage.mysql?.database || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              mysql: {
+                                ...settings.storage.mysql!,
+                                database: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field">
+                      <span className="setting-field-label">用户名</span>
+                      <input
+                        type="text"
+                        className="input"
+                        value={settings.storage.mysql?.user || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              mysql: {
+                                ...settings.storage.mysql!,
+                                user: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="setting-field setting-field-full">
+                      <span className="setting-field-label">密码</span>
+                      <input
+                        type="password"
+                        className="input"
+                        value={settings.storage.mysql?.password || ''}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              mysql: {
+                                ...settings.storage.mysql!,
+                                password: e.target.value,
+                              },
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                    <label className="checkbox-line setting-field-full">
+                      <input
+                        type="checkbox"
+                        checked={settings.storage.mysql?.ssl || false}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            storage: {
+                              ...settings.storage,
+                              mysql: {
+                                ...settings.storage.mysql!,
+                                ssl: e.target.checked,
+                              },
+                            },
+                          })
+                        }
+                      />
+                      使用 SSL/TLS
+                    </label>
+                  </div>
+                )}
+
+                <p className="hint setting-note">
+                  这里只保存扩展侧的数据源配置。Native Host 也需要按相同数据源准备连接环境。
+                </p>
+              </div>
+            )}
           </div>
         </section>
 

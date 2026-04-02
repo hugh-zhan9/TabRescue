@@ -13,10 +13,10 @@ import { homedir, platform } from 'os';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // 配置
-const EXTENSION_ID = 'YOUR_EXTENSION_ID'; // 安装后替换
-const HOST_NAME = 'com.tabrescue.native-host';
+const HOST_NAME = 'com.tabrescue.native_host';
 const MANIFEST_PATH = join(__dirname, '..', 'native-host.json');
-const EXECUTABLE_PATH = join(__dirname, '..', 'dist', 'index.js');
+const HOST_ENTRY_PATH = join(__dirname, '..', 'dist', 'index.js');
+const WRAPPER_PATH = join(__dirname, '..', 'dist', 'run-native-host');
 
 // 不同浏览器的manifest 路径
 const BROWSER_PATHS = {
@@ -37,20 +37,61 @@ const BROWSER_PATHS = {
   },
 };
 
-function getNativeMessagingDir(browser: string): string {
+function getNativeMessagingDir(browser) {
   const plat = platform();
-  const paths = BROWSER_PATHS[browser as keyof typeof BROWSER_PATHS];
+  const paths = BROWSER_PATHS[browser];
   if (!paths) throw new Error(`Unknown browser: ${browser}`);
-  return paths[plat as keyof typeof paths] as string;
+  return paths[plat];
+}
+
+function getExtensionIds() {
+  const arg = process.argv.find((item) => item.startsWith('--extension-id='));
+  const raw = arg?.split('=')[1] || process.env.TABRESCUE_EXTENSION_ID || '';
+  const ids = raw
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (ids.length === 0) {
+    throw new Error(
+      'Missing extension ID. Run `node scripts/install.js --extension-id=<your-extension-id>`.'
+    );
+  }
+
+  return ids;
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function createWrapper() {
+  if (!existsSync(HOST_ENTRY_PATH)) {
+    throw new Error(`Native host entry not found: ${HOST_ENTRY_PATH}`);
+  }
+
+  const nodePath = process.execPath;
+  const script = [
+    '#!/bin/sh',
+    `exec ${shellQuote(nodePath)} ${shellQuote(HOST_ENTRY_PATH)} "$@"`,
+    '',
+  ].join('\n');
+
+  writeFileSync(WRAPPER_PATH, script, 'utf-8');
+  chmodSync(WRAPPER_PATH, 0o755);
+
+  return WRAPPER_PATH;
 }
 
 function install() {
   console.log('Installing TabRescue Native Host...');
+  const extensionIds = getExtensionIds();
+  const executablePath = createWrapper();
 
   // 读取 manifest
-  let manifest = readFileSync(MANIFEST_PATH, 'utf-8');
-  manifest = manifest.replace('__INSTALL_PATH__', EXECUTABLE_PATH);
-  manifest = manifest.replace('__EXTENSION_ID__', EXTENSION_ID);
+  const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf-8'));
+  manifest.path = executablePath;
+  manifest.allowed_origins = extensionIds.map((id) => `chrome-extension://${id}/`);
 
   // 创建目录
   const chromeDir = getNativeMessagingDir('chrome');
@@ -63,17 +104,18 @@ function install() {
       }
 
       const manifestPath = join(dir, `${HOST_NAME}.json`);
-      writeFileSync(manifestPath, manifest);
+      writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
       chmodSync(manifestPath, 0o644);
       console.log(`✓ Installed to ${dir}`);
     } catch (err) {
-      console.error(`✗ Failed to install to ${dir}: ${(err as Error).message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`✗ Failed to install to ${dir}: ${message}`);
     }
   });
 
   console.log('\nInstallation complete!');
-  console.log(`Executable: ${EXECUTABLE_PATH}`);
-  console.log('\nNote: Make sure to replace YOUR_EXTENSION_ID in native-host.json with your actual extension ID');
+  console.log(`Executable: ${executablePath}`);
+  console.log(`Allowed origins: ${manifest.allowed_origins.join(', ')}`);
 }
 
 install();

@@ -1,5 +1,4 @@
 import {
-  CurrentSession,
   Snapshot,
   SnapshotDetail,
   Settings,
@@ -13,16 +12,12 @@ export interface StorageRepository {
   // 获取存储级别
   getStorageLevel(): number;
 
-  // CurrentSession
-  getCurrentSession(): Promise<CurrentSession | null>;
-  saveCurrentSession(session: CurrentSession): Promise<void>;
-  capture(): Promise<void>;
-
   // Snapshots
   getSnapshots(limit?: number): Promise<Snapshot[]>;
   getSnapshotDetail(id: string): Promise<SnapshotDetail | null>;
   saveSnapshot(snapshot: SnapshotDetail): Promise<void>;
   deleteSnapshot(id: string): Promise<void>;
+  getPopupState(limit?: number): Promise<{ snapshots: Snapshot[]; settings: Settings }>;
 
   // Settings
   getSettings(): Promise<Settings>;

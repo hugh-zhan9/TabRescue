@@ -2,6 +2,7 @@ import DatabaseLib from 'better-sqlite3';
 import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync } from 'fs';
+import { getUrlId, normalizeUrlKey } from './urlIdentity.js';
 
 type Database = DatabaseLib.Database;
 
@@ -12,26 +13,27 @@ type Database = DatabaseLib.Database;
 export class SqliteStorage {
   private db: Database | null = null;
   private dbPath: string;
+  private readonly browserScope: string;
 
-  constructor(dbPath?: string) {
+  constructor(dbPath?: string, browserScope: string = 'unknown') {
+    this.browserScope = this.normalizeBrowserScope(browserScope);
     this.dbPath = dbPath || join(homedir(), '.tabrescue', 'data.db');
   }
 
+  private normalizeBrowserScope(browserScope: string): string {
+    const normalized = browserScope.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    return normalized || 'unknown';
+  }
+
   async initialize(): Promise<void> {
-    // 确保目录存在
     const dir = join(this.dbPath, '..');
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
     }
 
-    // 动态导入 better-sqlite3
     const Database = (await import('better-sqlite3')).default;
     this.db = new Database(this.dbPath) as unknown as Database;
-
-    // 启用 WAL 模式
-    this.db!.pragma('journal_mode = WAL');
-
-    // 创建表
+    this.db.pragma('journal_mode = WAL');
     this.createTables();
   }
 
@@ -39,62 +41,77 @@ export class SqliteStorage {
     if (!this.db) return;
 
     this.db.exec(`
-      -- 当前会话元信息
+      CREATE TABLE IF NOT EXISTS urls (
+        id TEXT PRIMARY KEY,
+        urlKey TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL,
+        firstSeenAt INTEGER NOT NULL,
+        lastSeenAt INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS current_session (
-        id TEXT PRIMARY KEY CHECK (id = 'singleton'),
+        browserScope TEXT NOT NULL,
+        id TEXT NOT NULL CHECK (id = 'singleton'),
         updatedAt INTEGER NOT NULL,
         windowCount INTEGER NOT NULL,
-        tabCount INTEGER NOT NULL
+        tabCount INTEGER NOT NULL,
+        PRIMARY KEY (browserScope, id)
       );
 
-      -- 当前窗口表
       CREATE TABLE IF NOT EXISTS current_windows (
-        id TEXT PRIMARY KEY,
-        windowId TEXT NOT NULL UNIQUE,
+        browserScope TEXT NOT NULL,
+        id TEXT NOT NULL,
+        windowId TEXT NOT NULL,
         windowType TEXT,
         isFocused BOOLEAN DEFAULT FALSE,
-        snapIndex INTEGER
+        snapIndex INTEGER,
+        PRIMARY KEY (browserScope, id),
+        UNIQUE (browserScope, windowId)
       );
 
-      -- 当前标签页表（支持多种去重策略）
       CREATE TABLE IF NOT EXISTS current_tabs (
-        id TEXT PRIMARY KEY,
-        url TEXT NOT NULL,
+        browserScope TEXT NOT NULL,
+        id TEXT NOT NULL,
+        urlId TEXT NOT NULL,
         windowId TEXT NOT NULL,
         title TEXT,
         tabIndex INTEGER NOT NULL,
         isPinned BOOLEAN DEFAULT FALSE,
         openedAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
-        deletedAt INTEGER
+        deletedAt INTEGER,
+        PRIMARY KEY (browserScope, id),
+        FOREIGN KEY (urlId) REFERENCES urls(id)
       );
 
-      -- 快照主表
       CREATE TABLE IF NOT EXISTS snapshots (
-        id TEXT PRIMARY KEY,
+        browserScope TEXT NOT NULL,
+        id TEXT NOT NULL,
         createdAt INTEGER NOT NULL,
         windowCount INTEGER NOT NULL,
         tabCount INTEGER NOT NULL,
-        summary TEXT
+        summary TEXT,
+        PRIMARY KEY (browserScope, id)
       );
 
-      -- 快照窗口表
       CREATE TABLE IF NOT EXISTS snapshot_windows (
-        id TEXT PRIMARY KEY,
+        browserScope TEXT NOT NULL,
+        id TEXT NOT NULL,
         snapshotId TEXT NOT NULL,
         windowId TEXT NOT NULL,
         windowType TEXT,
         isFocused BOOLEAN DEFAULT FALSE,
         snapIndex INTEGER,
-        FOREIGN KEY (snapshotId) REFERENCES snapshots(id)
+        PRIMARY KEY (browserScope, id),
+        FOREIGN KEY (browserScope, snapshotId) REFERENCES snapshots(browserScope, id)
       );
 
-      -- 快照标签页表
       CREATE TABLE IF NOT EXISTS snapshot_tabs (
-        id TEXT PRIMARY KEY,
+        browserScope TEXT NOT NULL,
+        id TEXT NOT NULL,
         snapshotId TEXT NOT NULL,
+        urlId TEXT NOT NULL,
         windowId TEXT NOT NULL,
-        url TEXT NOT NULL,
         title TEXT,
         tabIndex INTEGER NOT NULL,
         isPinned BOOLEAN DEFAULT FALSE,
@@ -102,30 +119,75 @@ export class SqliteStorage {
         openedAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
         deletedAt INTEGER,
-        FOREIGN KEY (snapshotId) REFERENCES snapshots(id)
+        PRIMARY KEY (browserScope, id),
+        FOREIGN KEY (browserScope, snapshotId) REFERENCES snapshots(browserScope, id),
+        FOREIGN KEY (urlId) REFERENCES urls(id)
       );
 
-      -- 用户配置表
       CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
+        browserScope TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT,
+        PRIMARY KEY (browserScope, key)
       );
 
-      -- 创建索引（per-window 默认策略）
-      CREATE INDEX IF NOT EXISTS idx_current_tabs_per_window ON current_tabs(windowId, url);
-      CREATE INDEX IF NOT EXISTS idx_snapshot_tabs_per_window ON snapshot_tabs(snapshotId, windowId, url);
+      CREATE INDEX IF NOT EXISTS idx_current_tabs_scope_window ON current_tabs(browserScope, windowId, tabIndex);
+      CREATE INDEX IF NOT EXISTS idx_snapshot_tabs_scope_window ON snapshot_tabs(browserScope, snapshotId, windowId, tabIndex);
+      CREATE INDEX IF NOT EXISTS idx_urls_key ON urls(urlKey);
     `);
   }
 
-  // CurrentSession 操作
+  private upsertUrl(rawUrl: string, seenAt: number): string {
+    if (!this.db) {
+      throw new Error('SQLite database not initialized');
+    }
+
+    const urlKey = normalizeUrlKey(rawUrl);
+    const urlId = getUrlId(urlKey);
+
+    this.db.prepare(`
+      INSERT INTO urls (id, urlKey, url, firstSeenAt, lastSeenAt)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        lastSeenAt = excluded.lastSeenAt
+    `).run(urlId, urlKey, urlKey, seenAt, seenAt);
+
+    return urlId;
+  }
+
   async getCurrentSession(): Promise<any> {
     if (!this.db) return null;
 
-    const session = this.db.prepare('SELECT * FROM current_session WHERE id = ?').get('singleton');
+    const session = this.db.prepare(`
+      SELECT id, updatedAt, windowCount, tabCount
+      FROM current_session
+      WHERE browserScope = ? AND id = ?
+    `).get(this.browserScope, 'singleton') as any;
     if (!session) return null;
 
-    const windows = this.db.prepare('SELECT * FROM current_windows').all();
-    const tabs = this.db.prepare('SELECT * FROM current_tabs WHERE deletedAt IS NULL').all();
+    const windows = this.db.prepare(`
+      SELECT windowId, windowType, isFocused, snapIndex
+      FROM current_windows
+      WHERE browserScope = ?
+      ORDER BY snapIndex ASC
+    `).all(this.browserScope);
+
+    const tabs = this.db.prepare(`
+      SELECT
+        current_tabs.id,
+        urls.url,
+        current_tabs.windowId,
+        current_tabs.title,
+        current_tabs.tabIndex,
+        current_tabs.isPinned,
+        current_tabs.openedAt,
+        current_tabs.updatedAt,
+        current_tabs.deletedAt
+      FROM current_tabs
+      JOIN urls ON urls.id = current_tabs.urlId
+      WHERE current_tabs.browserScope = ? AND current_tabs.deletedAt IS NULL
+      ORDER BY current_tabs.windowId ASC, current_tabs.tabIndex ASC
+    `).all(this.browserScope);
 
     return { ...session, windows, tabs };
   }
@@ -134,30 +196,40 @@ export class SqliteStorage {
     if (!this.db) return;
 
     const transaction = this.db.transaction(() => {
-      // 保存会话元信息
       this.db!.prepare(`
-        INSERT OR REPLACE INTO current_session (id, updatedAt, windowCount, tabCount)
-        VALUES (?, ?, ?, ?)
-      `).run('singleton', session.updatedAt, session.windows.length, session.tabs.length);
+        INSERT OR REPLACE INTO current_session (browserScope, id, updatedAt, windowCount, tabCount)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(this.browserScope, 'singleton', session.updatedAt, session.windows.length, session.tabs.length);
 
-      // 保存窗口
-      this.db!.prepare('DELETE FROM current_windows').run();
+      this.db!.prepare('DELETE FROM current_windows WHERE browserScope = ?').run(this.browserScope);
       for (const win of session.windows) {
         this.db!.prepare(`
-          INSERT INTO current_windows (id, windowId, windowType, isFocused, snapIndex)
-          VALUES (?, ?, ?, ?, ?)
-        `).run(win.windowId, win.windowId, win.windowType, win.isFocused ? 1 : 0, win.snapIndex);
+          INSERT INTO current_windows (browserScope, id, windowId, windowType, isFocused, snapIndex)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          this.browserScope,
+          `${this.browserScope}:${win.windowId}`,
+          win.windowId,
+          win.windowType,
+          win.isFocused ? 1 : 0,
+          win.snapIndex
+        );
       }
 
-      // 保存标签页
-      this.db!.prepare('DELETE FROM current_tabs').run();
-      for (const tab of session.tabs) {
+      this.db!.prepare('DELETE FROM current_tabs WHERE browserScope = ?').run(this.browserScope);
+      for (let index = 0; index < session.tabs.length; index += 1) {
+        const tab = session.tabs[index];
+        const urlId = this.upsertUrl(tab.url, tab.updatedAt ?? session.updatedAt);
+
         this.db!.prepare(`
-          INSERT INTO current_tabs (id, url, windowId, title, tabIndex, isPinned, openedAt, updatedAt, deletedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO current_tabs (
+            browserScope, id, urlId, windowId, title, tabIndex, isPinned, openedAt, updatedAt, deletedAt
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          `${tab.windowId}-${tab.url}-${tab.openedAt}`,
-          tab.url,
+          this.browserScope,
+          `${this.browserScope}:${tab.windowId}:${tab.openedAt}:${index}`,
+          urlId,
           tab.windowId,
           tab.title,
           tab.tabIndex,
@@ -172,25 +244,50 @@ export class SqliteStorage {
     transaction();
   }
 
-  // Snapshots 操作
   async getSnapshots(limit: number = 20): Promise<any[]> {
     if (!this.db) return [];
     return this.db.prepare(`
       SELECT id, createdAt, windowCount, tabCount, summary
       FROM snapshots
+      WHERE browserScope = ?
       ORDER BY createdAt DESC
       LIMIT ?
-    `).all(limit);
+    `).all(this.browserScope, limit);
   }
 
   async getSnapshotDetail(id: string): Promise<any> {
     if (!this.db) return null;
 
-    const snapshot = this.db.prepare('SELECT * FROM snapshots WHERE id = ?').get(id);
+    const snapshot = this.db.prepare(`
+      SELECT id, createdAt, windowCount, tabCount, summary
+      FROM snapshots
+      WHERE browserScope = ? AND id = ?
+    `).get(this.browserScope, id);
     if (!snapshot) return null;
 
-    const windows = this.db.prepare('SELECT * FROM snapshot_windows WHERE snapshotId = ?').all(id);
-    const tabs = this.db.prepare('SELECT * FROM snapshot_tabs WHERE snapshotId = ? AND deletedAt IS NULL').all(id);
+    const windows = this.db.prepare(`
+      SELECT windowId, windowType, isFocused, snapIndex
+      FROM snapshot_windows
+      WHERE browserScope = ? AND snapshotId = ?
+      ORDER BY snapIndex ASC
+    `).all(this.browserScope, id);
+
+    const tabs = this.db.prepare(`
+      SELECT
+        snapshot_tabs.id,
+        urls.url,
+        snapshot_tabs.windowId,
+        snapshot_tabs.title,
+        snapshot_tabs.tabIndex,
+        snapshot_tabs.isPinned,
+        snapshot_tabs.openedAt,
+        snapshot_tabs.updatedAt,
+        snapshot_tabs.deletedAt
+      FROM snapshot_tabs
+      JOIN urls ON urls.id = snapshot_tabs.urlId
+      WHERE snapshot_tabs.browserScope = ? AND snapshot_tabs.snapshotId = ? AND snapshot_tabs.deletedAt IS NULL
+      ORDER BY snapshot_tabs.windowId ASC, snapshot_tabs.tabIndex ASC
+    `).all(this.browserScope, id);
 
     return { ...snapshot, windows, tabs };
   }
@@ -199,36 +296,54 @@ export class SqliteStorage {
     if (!this.db) return;
 
     const transaction = this.db.transaction(() => {
-      // 保存快照元信息
       this.db!.prepare(`
-        INSERT INTO snapshots (id, createdAt, windowCount, tabCount, summary)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(snapshot.id, snapshot.createdAt, snapshot.windowCount, snapshot.tabCount, JSON.stringify(snapshot.summary));
+        INSERT INTO snapshots (browserScope, id, createdAt, windowCount, tabCount, summary)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        this.browserScope,
+        snapshot.id,
+        snapshot.createdAt,
+        snapshot.windowCount,
+        snapshot.tabCount,
+        JSON.stringify(snapshot.summary)
+      );
 
-      // 保存窗口
       for (const win of snapshot.windows) {
         this.db!.prepare(`
-          INSERT INTO snapshot_windows (id, snapshotId, windowId, windowType, isFocused, snapIndex)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `).run(`${snapshot.id}-${win.windowId}`, snapshot.id, win.windowId, win.windowType, win.isFocused ? 1 : 0, win.snapIndex);
+          INSERT INTO snapshot_windows (browserScope, id, snapshotId, windowId, windowType, isFocused, snapIndex)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          this.browserScope,
+          `${this.browserScope}:${snapshot.id}:${win.windowId}`,
+          snapshot.id,
+          win.windowId,
+          win.windowType,
+          win.isFocused ? 1 : 0,
+          win.snapIndex
+        );
       }
 
-      // 保存标签页
-      for (const tab of snapshot.tabs) {
-        const uniqueId = `${snapshot.id}-${tab.windowId}-${tab.url}-${tab.openedAt}`;
+      for (let index = 0; index < snapshot.tabs.length; index += 1) {
+        const tab = snapshot.tabs[index];
+        const urlId = this.upsertUrl(tab.url, tab.updatedAt ?? snapshot.createdAt);
+
         this.db!.prepare(`
-          INSERT INTO snapshot_tabs (id, snapshotId, windowId, url, title, tabIndex, isPinned, openedAt, updatedAt)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO snapshot_tabs (
+            browserScope, id, snapshotId, urlId, windowId, title, tabIndex, isPinned, openedAt, updatedAt, deletedAt
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          uniqueId,
+          this.browserScope,
+          `${this.browserScope}:${snapshot.id}:${tab.windowId}:${tab.openedAt}:${index}`,
           snapshot.id,
+          urlId,
           tab.windowId,
-          tab.url,
           tab.title,
           tab.tabIndex,
           tab.isPinned ? 1 : 0,
           tab.openedAt,
-          tab.updatedAt
+          tab.updatedAt,
+          tab.deletedAt || null
         );
       }
     });
@@ -240,19 +355,22 @@ export class SqliteStorage {
     if (!this.db) return;
 
     const transaction = this.db.transaction(() => {
-      this.db!.prepare('DELETE FROM snapshot_tabs WHERE snapshotId = ?').run(id);
-      this.db!.prepare('DELETE FROM snapshot_windows WHERE snapshotId = ?').run(id);
-      this.db!.prepare('DELETE FROM snapshots WHERE id = ?').run(id);
+      this.db!.prepare('DELETE FROM snapshot_tabs WHERE browserScope = ? AND snapshotId = ?').run(this.browserScope, id);
+      this.db!.prepare('DELETE FROM snapshot_windows WHERE browserScope = ? AND snapshotId = ?').run(this.browserScope, id);
+      this.db!.prepare('DELETE FROM snapshots WHERE browserScope = ? AND id = ?').run(this.browserScope, id);
     });
 
     transaction();
   }
 
-  // Settings 操作
   async getSettings(): Promise<any> {
     if (!this.db) return this.getDefaultSettings();
 
-    const rows = this.db.prepare('SELECT * FROM settings').all() as any[];
+    const rows = this.db.prepare(`
+      SELECT key, value
+      FROM settings
+      WHERE browserScope = ?
+    `).all(this.browserScope) as any[];
     const settings: any = {};
 
     for (const row of rows) {
@@ -272,9 +390,9 @@ export class SqliteStorage {
     const transaction = this.db.transaction(() => {
       for (const [key, value] of Object.entries(settings)) {
         this.db!.prepare(`
-          INSERT OR REPLACE INTO settings (key, value)
-          VALUES (?, ?)
-        `).run(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+          INSERT OR REPLACE INTO settings (browserScope, key, value)
+          VALUES (?, ?, ?)
+        `).run(this.browserScope, key, typeof value === 'object' ? JSON.stringify(value) : String(value));
       }
     });
 
@@ -285,8 +403,7 @@ export class SqliteStorage {
     if (!this.db) return;
 
     const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-    this.db.prepare('DELETE FROM current_tabs WHERE deletedAt IS NOT NULL AND deletedAt < ?').run(cutoff);
-    this.db.prepare('DELETE FROM snapshot_tabs WHERE deletedAt IS NOT NULL AND deletedAt < ?').run(cutoff);
+    this.db.prepare('DELETE FROM snapshot_tabs WHERE browserScope = ? AND deletedAt IS NOT NULL AND deletedAt < ?').run(this.browserScope, cutoff);
   }
 
   private getDefaultSettings(): any {

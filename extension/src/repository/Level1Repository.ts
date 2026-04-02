@@ -1,11 +1,8 @@
 import { StorageRepository } from './types';
 import {
-  CurrentSession,
   Snapshot,
   SnapshotDetail,
   Settings,
-  WindowData,
-  TabData,
 } from '../types';
 
 /**
@@ -13,66 +10,11 @@ import {
  * 适用于轻量级用户，零配置，开箱即用
  */
 export class Level1Repository implements StorageRepository {
-  private STORAGE_KEY_CURRENT = 'currentSession';
   private STORAGE_KEY_SNAPSHOTS = 'snapshots';
   private STORAGE_KEY_SETTINGS = 'settings';
 
   getStorageLevel(): number {
     return 1;
-  }
-
-  async getCurrentSession(): Promise<CurrentSession | null> {
-    const result = await chrome.storage.local.get(this.STORAGE_KEY_CURRENT);
-    return result[this.STORAGE_KEY_CURRENT] || null;
-  }
-
-  async saveCurrentSession(session: CurrentSession): Promise<void> {
-    await chrome.storage.local.set({
-      [this.STORAGE_KEY_CURRENT]: session,
-    });
-  }
-
-  /**
-   * 采集当前浏览器状态并保存
-   * 用作 getCurrentSession 为空时的兜底补采
-   */
-  async capture(): Promise<void> {
-    const windows = await chrome.windows.getAll({ populate: true });
-
-    const sessionWindows: WindowData[] = windows.map((w, idx) => ({
-      windowId: w.id!.toString(),
-      windowType: w.type || 'normal',
-      isFocused: w.focused || false,
-      snapIndex: idx,
-    }));
-
-    const sessionTabs: TabData[] = [];
-    for (const win of windows) {
-      for (const tab of win.tabs || []) {
-        if (tab.incognito) continue;
-        if (!tab.url) continue;
-        const excluded = ['chrome://', 'about:', 'edge://', 'moz://', 'chrome-extension://', 'moz-extension://', 'chrome-newtab://', 'data:', 'javascript:', 'view-source:'];
-        if (excluded.some((p) => tab.url!.startsWith(p))) continue;
-
-        sessionTabs.push({
-          url: tab.url!,
-          windowId: win.id!.toString(),
-          title: tab.title,
-          tabIndex: tab.index,
-          isPinned: tab.pinned || false,
-          openedAt: Date.now(),
-          updatedAt: Date.now(),
-          deletedAt: null,
-        });
-      }
-    }
-
-    await this.saveCurrentSession({
-      id: 'singleton',
-      updatedAt: Date.now(),
-      windows: sessionWindows,
-      tabs: sessionTabs,
-    });
   }
 
   async getSnapshots(limit: number = 20): Promise<Snapshot[]> {
@@ -104,9 +46,21 @@ export class Level1Repository implements StorageRepository {
     });
   }
 
+  async getPopupState(limit: number = 20): Promise<{ snapshots: Snapshot[]; settings: Settings }> {
+    const result = await chrome.storage.local.get([
+      this.STORAGE_KEY_SNAPSHOTS,
+      this.STORAGE_KEY_SETTINGS,
+    ]);
+    const snapshots = ((result[this.STORAGE_KEY_SNAPSHOTS] || []) as Snapshot[])
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+    const settings = this.mergeSettings(result[this.STORAGE_KEY_SETTINGS] as Settings | undefined);
+    return { snapshots, settings };
+  }
+
   async getSettings(): Promise<Settings> {
     const result = await chrome.storage.local.get(this.STORAGE_KEY_SETTINGS);
-    return result[this.STORAGE_KEY_SETTINGS] || this.getDefaultSettings();
+    return this.mergeSettings(result[this.STORAGE_KEY_SETTINGS] as Settings | undefined);
   }
 
   async saveSettings(settings: Settings): Promise<void> {
@@ -121,6 +75,30 @@ export class Level1Repository implements StorageRepository {
       storage: { level: 1 },
       snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
       ui: { showRecoveryPromptOnStartup: false },
+    };
+  }
+
+  private mergeSettings(saved?: Partial<Settings>): Settings {
+    const defaults = this.getDefaultSettings();
+    return {
+      ...defaults,
+      ...saved,
+      dedup: {
+        ...defaults.dedup,
+        ...(saved?.dedup || {}),
+      },
+      storage: {
+        ...defaults.storage,
+        ...(saved?.storage || {}),
+      },
+      snapshot: {
+        ...defaults.snapshot,
+        ...(saved?.snapshot || {}),
+      },
+      ui: {
+        ...defaults.ui,
+        ...(saved?.ui || {}),
+      },
     };
   }
 }

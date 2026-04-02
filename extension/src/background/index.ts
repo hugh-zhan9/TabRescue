@@ -19,18 +19,20 @@ import type {
   SaveSettingsResponse,
   GetCurrentSessionResponse,
   GetRecoveryProgressResponse,
+  GetPopupStateResponse,
 } from '../shared/messages';
 
 // 服务实例（初始化后保持单例）
-let repository: StorageRepository;
-let eventListener: EventListener;
-let recoveryService: RecoveryService;
-let snapshotService: SnapshotService;
-let tracker: SessionTracker;
 const bootstrapRepository = new Level1Repository();
+let repository: StorageRepository = bootstrapRepository;
+let tracker = new SessionTracker(repository);
+let snapshotService = new SnapshotService(repository, tracker);
+let recoveryService = new RecoveryService(repository);
 
 // 初始化 Promise，确保所有消息处理都等待初始化完成
-let initPromise: Promise<void>;
+let initPromise: Promise<void> = Promise.resolve();
+const eventListener = new EventListener(tracker, snapshotService, () => initPromise);
+eventListener.setup();
 
 // 异步初始化仓库（根据 storage.level 选择实现）
 async function initRepository(): Promise<StorageRepository> {
@@ -54,10 +56,9 @@ function createRepository(level: StorageLevel): StorageRepository {
 function wireRuntimeServices(nextRepository: StorageRepository) {
   repository = nextRepository;
 
-  snapshotService = new SnapshotService(repository);
-  recoveryService = new RecoveryService(repository);
-
   tracker = new SessionTracker(repository);
+  snapshotService = new SnapshotService(repository, tracker);
+  recoveryService = new RecoveryService(repository);
 
   if (eventListener) {
     eventListener.setTracker(tracker);
@@ -65,15 +66,22 @@ function wireRuntimeServices(nextRepository: StorageRepository) {
   }
 }
 
+function scheduleBackgroundTask(task: () => Promise<void>, label: string) {
+  void task().catch((error) => {
+    console.error(`[TabRescue] ${label} failed:`, error);
+  });
+}
+
 // 异步初始化所有服务
 async function initialize(): Promise<void> {
   const initialRepository = await initRepository();
   wireRuntimeServices(initialRepository);
-  eventListener = new EventListener(tracker, snapshotService);
-  await eventListener.setup();
+  scheduleBackgroundTask(() => eventListener.refreshAutoSaveInterval(), 'refresh auto save interval');
 
-  // setup 完成后立即采集当前 session（onInstalled 事件可能已错过）
-  await tracker.fullCapture();
+  // setup 完成后后台采集当前 session，不阻塞 popup 首屏
+  scheduleBackgroundTask(async () => {
+    await tracker.fullCapture();
+  }, 'initial full capture');
 
   console.log(`[TabRescue] 归屿 initialized (Level ${repository.getStorageLevel()})`);
 }
@@ -112,7 +120,7 @@ async function handleMessage(
         break;
       }
       case 'createSnapshot': {
-        const snapshot = await snapshotService.createSnapshot();
+        const snapshot = await snapshotService.createSnapshot({ refreshCurrentState: true });
         const response: CreateSnapshotResponse = { success: true, data: snapshot };
         sendResponse(response);
         break;
@@ -129,6 +137,15 @@ async function handleMessage(
         sendResponse(response);
         break;
       }
+      case 'getPopupState': {
+        const { snapshots, settings } = await repository.getPopupState(message.limit);
+        const response: GetPopupStateResponse = {
+          success: true,
+          data: { snapshots, settings },
+        };
+        sendResponse(response);
+        break;
+      }
       case 'saveSettings': {
         const nextLevel = message.settings.storage?.level ?? 1;
         const nextRepository = createRepository(nextLevel as StorageLevel);
@@ -140,25 +157,27 @@ async function handleMessage(
 
         if (repository.getStorageLevel() !== nextRepository.getStorageLevel()) {
           wireRuntimeServices(nextRepository);
-          await tracker.fullCapture();
         }
+
+        tracker.setSettings(message.settings);
+        await tracker.fullCapture();
 
         // 更新自动保存间隔
         const newInterval = message.settings.snapshot?.autoSaveInterval ?? 5;
         await eventListener?.updateAutoSaveInterval(newInterval);
+        await snapshotService.enforceSnapshotLimit(message.settings.snapshot?.maxSnapshots);
         const response: SaveSettingsResponse = { success: true };
         sendResponse(response);
         break;
       }
       case 'getCurrentSession': {
-        const session = await repository.getCurrentSession();
+        const session = tracker.getCurrentSession();
         const response: GetCurrentSessionResponse = { success: true, data: session };
         sendResponse(response);
         break;
       }
       case 'syncCurrentSession': {
-        await tracker.fullCapture();
-        const session = await repository.getCurrentSession();
+        const session = await tracker.fullCapture();
         const response: GetCurrentSessionResponse = { success: true, data: session };
         sendResponse(response);
         break;

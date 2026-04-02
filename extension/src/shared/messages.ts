@@ -49,6 +49,11 @@ export interface GetRecoveryProgressRequest {
   action: 'getRecoveryProgress';
 }
 
+export interface GetPopupStateRequest {
+  action: 'getPopupState';
+  limit?: number;
+}
+
 export type BackgroundRequest =
   | GetSnapshotsRequest
   | GetSnapshotDetailRequest
@@ -58,7 +63,8 @@ export type BackgroundRequest =
   | SaveSettingsRequest
   | GetCurrentSessionRequest
   | SyncCurrentSessionRequest
-  | GetRecoveryProgressRequest;
+  | GetRecoveryProgressRequest
+  | GetPopupStateRequest;
 
 // ============ Background → Popup 响应 ============
 
@@ -89,4 +95,8 @@ export type GetRecoveryProgressResponse = BackgroundResponse<{
   isRestoring: boolean;
   lastRestoredSnapshotId: string | null;
   lastRestoredAt: number | null;
+}>;
+export type GetPopupStateResponse = BackgroundResponse<{
+  snapshots: Snapshot[];
+  settings: Settings;
 }>;

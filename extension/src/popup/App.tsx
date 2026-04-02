@@ -7,7 +7,7 @@ import type {
   RestoreSnapshotResponse,
   GetSnapshotsResponse,
   GetSnapshotDetailResponse,
-  GetSettingsResponse,
+  GetPopupStateResponse,
 } from '../shared/messages';
 import type { Settings as SettingsType, Snapshot, SnapshotDetail } from '../types';
 
@@ -25,9 +25,9 @@ export default function App() {
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // 每次打开 popup 都同步一次当前浏览器状态，再加载快照
+  // 每次打开 popup 先直接加载现有数据，避免被全量同步阻塞
   useEffect(() => {
-    void syncData();
+    void loadPopupState();
   }, []);
 
   // 检查 URL 参数是否要显示设置页
@@ -55,29 +55,25 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => setToast(null), 3000);
   }
 
-  async function syncData() {
+  async function loadPopupState() {
     setLoading(true);
     try {
-      await chrome.runtime.sendMessage({ action: 'syncCurrentSession' } as BackgroundRequest);
-      const [snapshotsRes, settingsRes] = await Promise.all([
-        chrome.runtime.sendMessage(
-          { action: 'getSnapshots', limit: 20 } as BackgroundRequest
-        ) as Promise<GetSnapshotsResponse>,
-        chrome.runtime.sendMessage(
-          { action: 'getSettings' } as BackgroundRequest
-        ) as Promise<GetSettingsResponse>,
-      ]);
-      if (snapshotsRes.success) {
-        setSnapshots(snapshotsRes.data);
-      }
-      if (settingsRes.success) {
-        setSettings(settingsRes.data);
+      const response = await chrome.runtime.sendMessage(
+        { action: 'getPopupState', limit: 20 } as BackgroundRequest
+      ) as GetPopupStateResponse;
+      if (response.success) {
+        setSnapshots(response.data.snapshots);
+        setSettings(response.data.settings);
       }
     } catch (err) {
-      console.error('Sync failed:', err);
+      console.error('Popup load failed:', err);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function syncData() {
+    await loadPopupState();
   }
 
   async function handleToggleDetail(snapshotId: string) {
@@ -163,7 +159,7 @@ export default function App() {
         onBack={() => setShowSettings(false)}
         onSave={() => {
           showToast('设置已保存', 'success');
-          syncData();
+          loadPopupState();
         }}
       />
     );
