@@ -44,6 +44,12 @@ npm run build
 
 详细安装说明请参考 [INSTALL.md](./INSTALL.md)
 
+### GitHub 自动打包
+
+- `push master` 后会自动跑测试、lint、构建，并上传测试包 artifact
+- 发布 GitHub Release 后会自动生成正式安装包 `tabrescue-extension.zip`
+- 用户下载 zip 后需要先解压，再在浏览器中加载解压目录
+
 ## 📖 使用指南
 
 ### 保存会话

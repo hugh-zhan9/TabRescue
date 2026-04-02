@@ -5,6 +5,26 @@
 - Node.js 18+
 - Chrome 88+ / Edge 88+ / Firefox 90+
 
+## GitHub 自动打包分发
+
+- 推送到 `master` 后，GitHub Actions 会自动运行测试、lint、构建，并生成一个测试安装包 artifact。
+- 发布 GitHub Release 后，Actions 会自动生成正式安装包并挂到 Release 附件中。
+- 用户下载安装时，不是直接把 zip 拖进浏览器，而是先解压 zip，再加载解压后的目录。
+
+### 下载正式安装包
+
+1. 打开仓库的 `Releases` 页面
+2. 下载附件 `tabrescue-extension.zip`
+3. 解压到本地目录
+4. 在浏览器中加载解压后的目录
+
+### 下载测试安装包
+
+1. 打开仓库 `Actions` 页面
+2. 进入最新一次 `Extension CI`
+3. 下载 artifact `tabrescue-extension-master`
+4. 解压后按下面的浏览器安装步骤加载
+
 ## 快速安装（Level 1 - 纯扩展模式）
 
 ### 步骤 1: 安装依赖
@@ -26,8 +46,9 @@ npm run build
 1. 打开 `chrome://extensions/` (或 `edge://extensions/`)
 2. 启用右上角的"开发者模式"
 3. 点击"加载未打包的扩展程序"
-4. 选择 `extension/dist` 目录
-5. 记下扩展 ID（类似 `abcdefghijklmnopqrstuvwxyz123456`）
+4. 如果是本地构建，选择 `extension/dist` 目录
+5. 如果是从 GitHub 下载的安装包，选择解压后的目录
+6. 记下扩展 ID（类似 `abcdefghijklmnopqrstuvwxyz123456`）
 
 **Firefox:**
 1. 打开 `about:debugging#/runtime/this-firefox`
@@ -130,7 +151,7 @@ npm start
 
 **解决方案:**
 1. 确保已运行 `npm run build`
-2. 检查 `dist` 目录是否存在
+2. 检查目录根部是否存在 `manifest.json`
 3. 查看 `chrome://extensions/` 中的错误信息
 
 ### 问题：Native Host 无法连接
