@@ -1,0 +1,35 @@
+{
+  "id": "00-bootstrap-guidelines",
+  "name": "Bootstrap Guidelines",
+  "description": "Fill in project development guidelines for AI agents",
+  "status": "completed",
+  "dev_type": "docs",
+  "priority": "P1",
+  "creator": "zhangyukun",
+  "assignee": "zhangyukun",
+  "createdAt": "2026-04-02",
+  "completedAt": "2026-04-02",
+  "commit": null,
+  "subtasks": [
+    {
+      "name": "Fill engineering guidelines",
+      "status": "completed"
+    },
+    {
+      "name": "Fill frontend guidelines",
+      "status": "completed"
+    },
+    {
+      "name": "Add code examples",
+      "status": "completed"
+    }
+  ],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".trellis/spec/engineering/",
+    ".trellis/spec/frontend/"
+  ],
+  "notes": "Completed by bootstrapping browser extension specs from the current design doc and project conventions; source-code examples should be added later as implementation lands.",
+  "meta": {}
+}

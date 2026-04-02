@@ -1,0 +1,31 @@
+{
+  "name": "tabrescue-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TabRescue - Reliable browser session recovery tool",
+  "scripts": {
+    "install:all": "npm install && cd extension && npm install && cd ../native-host && npm install",
+    "build:extension": "cd extension && npm run build",
+    "build:native": "cd native-host && npm run build",
+    "build:all": "npm run build:extension && npm run build:native",
+    "test:extension": "cd extension && npm test",
+    "test:native": "cd native-host && npm test",
+    "test:all": "npm run test:extension && npm run test:native",
+    "lint:extension": "cd extension && npm run lint",
+    "dev:extension": "cd extension && npm run dev",
+    "dev:native": "cd native-host && npm run dev"
+  },
+  "keywords": [
+    "browser",
+    "session",
+    "restore",
+    "tabs",
+    "chrome-extension"
+  ],
+  "author": "",
+  "license": "MIT",
+  "workspaces": [
+    "extension",
+    "native-host"
+  ]
+}

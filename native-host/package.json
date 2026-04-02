@@ -1,0 +1,24 @@
+{
+  "name": "tab-rescue-native-host",
+  "version": "0.1.0",
+  "description": "Native host for TabRescue browser extension - provides SQLite and remote DB storage",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "install": "node scripts/install.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.0.0",
+    "pg": "^8.11.0",
+    "mysql2": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
+    "typescript": "^5.2.0"
+  }
+}

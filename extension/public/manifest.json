@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "归屿 TabRescue",
+  "version": "0.1.0",
+  "description": "归屿 TabRescue helps you save and restore browser sessions reliably. Never lose your tabs again.",
+  "permissions": [
+    "tabs",
+    "windows",
+    "storage",
+    "sessions",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "归屿 ⛰️"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "options_page": "src/popup/index.html?settings=true"
+}

@@ -1,0 +1,31 @@
+{
+  "id": "browser-session-recovery-clarification",
+  "name": "browser-session-recovery-clarification",
+  "title": "brainstorm: browser session recovery clarification",
+  "description": "Confirm the browser session recovery design is implementation-ready and sync Trellis specs to match it.",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "priority": "P2",
+  "creator": "zhangyukun",
+  "assignee": "zhangyukun",
+  "createdAt": "2026-04-02",
+  "completedAt": "2026-04-02",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "current_phase": 4,
+  "next_action": [],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md",
+    ".trellis/spec/frontend/",
+    ".trellis/spec/engineering/"
+  ],
+  "notes": "Completed as a requirements-clarification task. The design is considered sufficient for MVP implementation planning, and Trellis specs were synchronized to the current document.",
+  "meta": {}
+}

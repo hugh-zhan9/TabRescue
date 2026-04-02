@@ -1,0 +1,58 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+**/node_modules/
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/dist
+/build
+**/dist/
+**/build/
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# logs
+logs
+*.log
+
+# database
+*.db
+*.sqlite
+
+# native host
+/target
+native-host/native-host
+
+# local AI/browser preview artifacts
+.superpowers/
+.claude/settings.local.json
+tabrescue-extension.zip
+208a6fb0-1f74-4a22-bb1e-33aa963c9cb2.png
