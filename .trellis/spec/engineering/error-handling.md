@@ -101,7 +101,7 @@ These codes should be more stable than raw browser error messages.
 
 Until implementation code exists, treat the design doc as the canonical example source:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
   - section 6.7: restore confirmation tiers and repeat-restore guard
   - section 6.11: inline failure feedback and snapshot-level warning rules
   - section 8: stability requirements for partial restore and non-destructive failure handling

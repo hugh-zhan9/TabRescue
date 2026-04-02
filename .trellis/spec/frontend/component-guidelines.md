@@ -70,7 +70,7 @@ Split when a file is doing both layout and action orchestration.
 
 Until implementation code exists, treat the design doc as the canonical example source:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
   - sections 6.5 and 6.7: popup layout, preview list, restore action, save-now action
   - section 6.8: passive startup UX and badge-first recovery entry
   - section 6.11: snapshot summary and failure message presentation

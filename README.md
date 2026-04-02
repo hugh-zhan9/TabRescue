@@ -128,7 +128,7 @@ npm run dev:extension
 
 - [安装指南](./INSTALL.md) - 详细的安装步骤
 - [实施文档](./docs/IMPLEMENTATION.md) - 技术架构和实现细节
-- [需求设计](./docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md) - 产品需求和设计
+- [需求设计](./docs/2026-04-02-browser-session-recovery-design.md) - 产品需求和设计
 - [使用指南](./GUIDE.md) - 功能详解和最佳实践
 
 ## 🤝 贡献

@@ -99,7 +99,7 @@ AI needs to match existing patterns, not introduce new ones.
 This project does not yet have implementation source files for the extension.
 For bootstrap purposes, the canonical examples come from:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
 - `.trellis/spec/frontend/`
 - `.trellis/spec/engineering/`
 

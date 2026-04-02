@@ -201,7 +201,7 @@ Mode switching rules:
 
 Until implementation code exists, treat the design doc as the canonical example source:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
   - sections 5.2 and 5.3: Level 1/2/3 architecture and storage abstraction
   - sections 6.1, 6.2, 6.3, 6.9: dedup strategy, dual-write model, and snapshot timing
   - section 7.5: current session and snapshot table shapes

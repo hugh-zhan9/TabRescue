@@ -49,6 +49,6 @@
 
 Until implementation code exists, treat the design doc as the canonical example source:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
   - sections 6.5, 6.7, 6.8: popup behavior, grouped preview, startup entry, restore confirmations
   - section 13: V1 acceptance expectations across supported browsers

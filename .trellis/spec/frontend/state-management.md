@@ -66,7 +66,7 @@ Only introduce wider shared state when multiple UI surfaces truly need the same 
 
 Until implementation code exists, treat the design doc as the canonical example source:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
   - sections 5.2 and 5.3: product levels and storage-level selection
   - sections 6.2 and 6.9: `currentSession` as live state and `snapshots` as archive state
   - section 6.5: settings and history data exposed to UI

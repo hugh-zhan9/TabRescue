@@ -22,7 +22,7 @@
   "children": [],
   "parent": null,
   "relatedFiles": [
-    "docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md",
+    "docs/2026-04-02-browser-session-recovery-design.md",
     ".trellis/spec/frontend/",
     ".trellis/spec/engineering/"
   ],

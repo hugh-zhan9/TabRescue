@@ -134,7 +134,7 @@ Do not let Native Messaging transport details leak into UI components or browser
 
 Until implementation code exists, treat the design doc as the canonical example source:
 
-- `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- `docs/2026-04-02-browser-session-recovery-design.md`
   - section 5: target browsers and WebExtensions direction
   - section 5.1: Safari compatibility boundary and adapter strategy
   - section 5.2 and 5.3: Level 1/2/3 product shape and Native Messaging boundary

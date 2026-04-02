@@ -2,7 +2,7 @@
 
 ## Goal
 
-Review `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`, confirm whether it is now sufficient for MVP implementation, and sync the Trellis project specs to match the current design.
+Review `docs/2026-04-02-browser-session-recovery-design.md`, confirm whether it is now sufficient for MVP implementation, and sync the Trellis project specs to match the current design.
 
 ## What I Already Know
 
@@ -51,7 +51,7 @@ Review `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`, c
 
 ## Technical Notes
 
-- Primary reference: `docs/superpowers/specs/2026-04-02-browser-session-recovery-design.md`
+- Primary reference: `docs/2026-04-02-browser-session-recovery-design.md`
 - Related context: `.trellis/spec/frontend/` and `.trellis/spec/engineering/`
 - Repo context: no extension source files are present yet
 - The design doc now includes executable details for:
