@@ -21,7 +21,7 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --workspace extension --include-workspace-root=false
 
       - name: Run tests
         working-directory: extension
