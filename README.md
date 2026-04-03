@@ -39,7 +39,7 @@ npm run build
 
 ### 加载到浏览器
 
-1. Chrome/Edge: 访问 `chrome://extensions/`，启用开发者模式，加载未打包的扩展程序
+1. Chrome/Edge: 访问 `chrome://extensions/`，启用开发者模式，加载已解压的扩展程序
 2. Firefox: 访问 `about:debugging`，临时载入附加组件
 
 详细安装说明请参考 [INSTALL.md](./INSTALL.md)
@@ -49,6 +49,7 @@ npm run build
 - `push master` 后会自动跑测试、lint、构建，并上传测试包 artifact
 - 发布 GitHub Release 后会自动生成正式安装包 `tabrescue-extension.zip`
 - 用户下载 zip 后需要先解压，再在浏览器中加载解压目录
+- Level 1 模式的数据保存在浏览器的 `chrome.storage.local` 中；浏览器崩溃或系统重启后通常仍会保留，真正用于恢复的是已保存的 `snapshots`
 
 ## 📖 使用指南
 

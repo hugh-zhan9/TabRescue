@@ -45,7 +45,7 @@ npm run build
 **Chrome/Edge:**
 1. 打开 `chrome://extensions/` (或 `edge://extensions/`)
 2. 启用右上角的"开发者模式"
-3. 点击"加载未打包的扩展程序"
+3. 点击"加载已解压的扩展程序"
 4. 如果是本地构建，选择 `extension/dist` 目录
 5. 如果是从 GitHub 下载的安装包，选择解压后的目录
 6. 记下扩展 ID（类似 `abcdefghijklmnopqrstuvwxyz123456`）
@@ -100,7 +100,7 @@ node scripts/install.js
 
 1. 点击扩展图标
 2. 点击 ⚙️ 设置
-3. 将存储模式改为 Level 2（需要扩展支持，待实现）
+3. 将存储模式改为 Level 2
 
 ---
 
@@ -164,7 +164,7 @@ npm start
 ### 问题：数据未保存
 
 **解决方案:**
-1. Level 1: 检查 chrome.storage.local 容量（默认 5-10MB）
+1. Level 1: 检查 `chrome.storage.local` 是否仍有可用空间，并确认最近一次快照是否已成功保存
 2. Level 2: 检查 `~/.tabrescue/data.db` 文件是否存在
 3. Level 3: 检查数据库连接
 

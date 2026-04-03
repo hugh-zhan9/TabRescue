@@ -196,11 +196,11 @@ Safari 支持预计工作量：1-2 周（在首版基础上）
 
 默认策略：`per-window`
 
-**4. 数据清理策略**
+**4. 删除记录策略**
 
-- 逻辑删除的数据保留 N 天（可配置，默认 30 天）。
-- 定期清理过期的已删除记录。
-- 用户可手动触发立即清理。
+- 关闭标签页后的 `deletedAt` 仅作为内部状态校准字段，不作为用户可配置能力暴露。
+- 当前版本不提供“手动清理已删除记录”入口。
+- 用户可见的数据保留策略聚焦于 `snapshots` 的数量上限，而不是删除记录保留天数。
 
 ### 6.3 快照管理
 
@@ -230,6 +230,7 @@ Safari 支持预计工作量：1-2 周（在首版基础上）
 - `currentSession` 为空时，不生成快照。
 - `currentSession` 中没有有效可恢复标签页时，不生成快照。
 - 浏览器刚启动、仅有空白页或内部页时，不触发噪音快照。
+- 浏览器重启后，`currentSession` 可能被新的全量采集结果覆盖，因此跨重启恢复必须以 `snapshots` 为准。
 
 ### 6.4 恢复能力
 
@@ -503,7 +504,7 @@ CREATE TABLE windows (
   FOREIGN KEY (snapshotId) REFERENCES snapshots(id)
 );
 
--- 标签页表（支持逻辑删除和多种去重策略）
+-- 标签页表（支持内部删除标记和多种去重策略）
 CREATE TABLE tabs (
   id          TEXT PRIMARY KEY,
   snapshotId  TEXT NOT NULL,
@@ -515,7 +516,7 @@ CREATE TABLE tabs (
   isPinned    BOOLEAN DEFAULT FALSE, -- 是否固定标签
   openedAt    INTEGER NOT NULL,   -- 首次打开时间
   updatedAt   INTEGER NOT NULL,   -- 最后更新时间
-  deletedAt   INTEGER,            -- 逻辑删除时间（NULL 表示未删除）
+  deletedAt   INTEGER,            -- 内部删除标记时间（NULL 表示未删除）
   FOREIGN KEY (snapshotId) REFERENCES snapshots(id)
 );
 
@@ -549,7 +550,8 @@ CREATE TABLE settings (
 ```
 Level 1 (纯扩展):
   - 使用 chrome.storage.local API
-  - 数据以 JSON 形式存储
+  - 数据以 JSON 形式存储在浏览器 profile 下的扩展本地存储中
+  - 浏览器崩溃或系统重启后通常仍会保留
   - 无需 SQL，通过 Repository 层抽象
 
 Level 2 (扩展 + 本地宿主):

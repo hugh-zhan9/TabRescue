@@ -287,6 +287,10 @@ export interface SnapshotDetail extends Snapshot {
 
 #### Level 1: chrome.storage.local
 
+- 数据由浏览器托管并持久化在浏览器 profile 下，不存放在项目目录中。
+- 浏览器崩溃或系统重启后，`chrome.storage.local` 中的 `snapshots` 和 `settings` 通常仍会保留。
+- `currentSession` 会在浏览器重新启动后被新的全量采集结果刷新，因此恢复入口应始终基于 `snapshots`。
+
 ```json
 {
   "currentSession": {
@@ -639,7 +643,7 @@ export class SessionTracker {
     const session = await this.repository.getCurrentSession();
     if (!session) return;
 
-    // 找到对应的标签页并逻辑删除
+    // 找到对应的标签页并打删除标记
     const tab = session.tabs.find((t) => t.id === tabId.toString());
     if (tab) {
       tab.deletedAt = Date.now();
@@ -1256,7 +1260,7 @@ fn main() -> Result<(), error::Error> {
 
 **交付物**:
 - 会话采集功能完整
-- 数据存储到 chrome.storage.local
+- 数据存储到 chrome.storage.local，由浏览器负责持久化
 - 可通过 DevTools 验证数据
 
 ### 8.3 Phase 3: 恢复功能（2-3 天）
