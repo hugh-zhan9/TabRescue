@@ -372,15 +372,16 @@ export class StorageManager {
   async getPopupState(limit?: number) {
     await this.ensureStorageInitialized();
     const startedAt = Date.now();
-    const snapshots = await (this.storage as any).getSnapshots(limit);
-    const afterSnapshotsAt = Date.now();
     const settings = await (this.storage as any).getSettings();
+    const afterSettingsAt = Date.now();
+    const displayLimit = limit ?? settings?.snapshot?.maxSnapshots ?? 5;
+    const snapshots = await (this.storage as any).getSnapshots(displayLimit);
     const finishedAt = Date.now();
     logNativeHost('get_popup_state_timing', {
       browserScope: this.browserScope,
-      limit: limit ?? null,
-      getSnapshotsMs: afterSnapshotsAt - startedAt,
-      getSettingsMs: finishedAt - afterSnapshotsAt,
+      limit: displayLimit,
+      getSettingsMs: afterSettingsAt - startedAt,
+      getSnapshotsMs: finishedAt - afterSettingsAt,
       totalMs: finishedAt - startedAt,
       snapshotsCount: Array.isArray(snapshots) ? snapshots.length : null,
     });

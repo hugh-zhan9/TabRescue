@@ -17,7 +17,7 @@ export class SessionTracker {
     return {
       dedup: { strategy: 'per-window' },
       storage: { level: 1 },
-      snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
+      snapshot: { maxSnapshots: 5, autoSaveInterval: 5, retentionHours: 24 },
       ui: { showRecoveryPromptOnStartup: false },
     };
   }

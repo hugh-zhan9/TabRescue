@@ -165,7 +165,7 @@ async function handleMessage(
         // 更新自动保存间隔
         const newInterval = message.settings.snapshot?.autoSaveInterval ?? 5;
         await eventListener?.updateAutoSaveInterval(newInterval);
-        await snapshotService.enforceSnapshotLimit(message.settings.snapshot?.maxSnapshots);
+        await snapshotService.enforceSnapshotRetention(message.settings.snapshot?.retentionHours);
         const response: SaveSettingsResponse = { success: true };
         sendResponse(response);
         break;

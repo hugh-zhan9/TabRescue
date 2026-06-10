@@ -114,4 +114,37 @@ describe('EventListener', () => {
     expect(snapshotService.createSnapshot).toHaveBeenCalledTimes(2);
     expect(tracker.onTabCreated).toHaveBeenCalledTimes(2);
   });
+
+  it('should skip unchanged scheduled snapshots after a full capture', async () => {
+    const tracker = {
+      onTabCreated: jest.fn(),
+      onTabClosed: jest.fn(),
+      onTabUpdated: jest.fn(),
+      onTabMoved: jest.fn(),
+      onTabActivated: jest.fn(),
+      onWindowCreated: jest.fn(),
+      onWindowClosed: jest.fn(),
+      onWindowFocused: jest.fn(),
+      initialize: jest.fn(),
+      fullCapture: jest.fn(),
+      getSettings: jest.fn().mockResolvedValue({ snapshot: { autoSaveInterval: 5 } }),
+      isLastTrackedWindow: jest.fn().mockResolvedValue(false),
+    } as any;
+
+    const snapshotService = {
+      createSnapshot: jest.fn().mockResolvedValue(undefined),
+    } as any;
+
+    const listener = new EventListener(tracker, snapshotService);
+    listener.setup();
+
+    const onAlarm = (chrome.alarms.onAlarm.addListener as jest.Mock).mock.calls[0][0];
+    onAlarm({ name: 'snapshot' });
+    await flushMicrotasks();
+
+    expect(snapshotService.createSnapshot).toHaveBeenCalledWith({
+      refreshCurrentState: true,
+      skipIfUnchanged: true,
+    });
+  });
 });

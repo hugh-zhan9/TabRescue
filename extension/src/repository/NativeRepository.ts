@@ -48,7 +48,7 @@ export class NativeRepository implements StorageRepository {
     return {
       dedup: { strategy: 'per-window' },
       storage: { level: this.level },
-      snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
+      snapshot: { maxSnapshots: 5, autoSaveInterval: 5, retentionHours: 24 },
       ui: { showRecoveryPromptOnStartup: false },
     };
   }
@@ -167,7 +167,7 @@ export class NativeRepository implements StorageRepository {
     await this.sendMessage('delete_snapshot', { id });
   }
 
-  async getPopupState(limit: number = 20): Promise<{ snapshots: Snapshot[]; settings: Settings }> {
+  async getPopupState(limit?: number): Promise<{ snapshots: Snapshot[]; settings: Settings }> {
     try {
       const result = await this.sendMessage('get_popup_state', { limit }) as {
         snapshots?: Snapshot[];

@@ -5,7 +5,6 @@ import Toast from './components/Toast';
 import type {
   BackgroundRequest,
   RestoreSnapshotResponse,
-  GetSnapshotsResponse,
   GetSnapshotDetailResponse,
   GetPopupStateResponse,
 } from '../shared/messages';
@@ -59,7 +58,7 @@ export default function App() {
     setLoading(true);
     try {
       const response = await chrome.runtime.sendMessage(
-        { action: 'getPopupState', limit: 20 } as BackgroundRequest
+        { action: 'getPopupState' } as BackgroundRequest
       ) as GetPopupStateResponse;
       if (response.success) {
         setSnapshots(response.data.snapshots);
@@ -112,9 +111,7 @@ export default function App() {
       const response = await chrome.runtime.sendMessage(request);
       if (response.success) {
         showToast('快照已创建', 'success');
-        // 刷新快照列表
-        const r = await chrome.runtime.sendMessage({ action: 'getSnapshots', limit: 20 } as BackgroundRequest) as GetSnapshotsResponse;
-        if (r.success) setSnapshots(r.data);
+        await loadPopupState();
       } else {
         showToast(response.error || '创建快照失败', 'error');
       }

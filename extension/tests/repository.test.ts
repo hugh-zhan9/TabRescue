@@ -43,10 +43,11 @@ describe('Level1Repository', () => {
 
     const { Level1Repository } = await import('../src/repository/Level1Repository');
     const repository = new Level1Repository();
-    const result = await repository.getPopupState(20);
+    const result = await repository.getPopupState();
 
     expect(result.snapshots).toHaveLength(1);
     expect(result.settings.snapshot.autoSaveInterval).toBe(10);
+    expect(result.settings.snapshot.retentionHours).toBe(24);
   });
 });
 
@@ -83,6 +84,7 @@ describe('NativeRepository', () => {
 
     expect(result.snapshots).toHaveLength(1);
     expect(result.settings.snapshot.autoSaveInterval).toBe(15);
-    expect(result.settings.snapshot.maxSnapshots).toBe(20);
+    expect(result.settings.snapshot.maxSnapshots).toBe(5);
+    expect(result.settings.snapshot.retentionHours).toBe(24);
   });
 });

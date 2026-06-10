@@ -27,8 +27,9 @@ export interface Settings {
     mysql?: DbConfig;
   };
   snapshot: {
-    maxSnapshots: number;
+    maxSnapshots: number; // Popup 展示数量
     autoSaveInterval: number; // 分钟，0=仅事件触发
+    retentionHours: number; // 实际快照留存时间
   };
   ui: {
     showRecoveryPromptOnStartup: boolean;

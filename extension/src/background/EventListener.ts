@@ -200,7 +200,10 @@ export class EventListener {
       if (alarm.name === 'snapshot') {
         await this.runWhenReady(async () => {
           try {
-            await this.snapshotService.createSnapshot({ refreshCurrentState: true });
+            await this.snapshotService.createSnapshot({
+              refreshCurrentState: true,
+              skipIfUnchanged: true,
+            });
           } catch {
             // 后台定时保存只做 best-effort
           }

@@ -6,6 +6,11 @@ export interface SessionSnapshotSource {
   fullCapture(): Promise<CurrentSession>;
 }
 
+export interface CreateSnapshotOptions {
+  refreshCurrentState?: boolean;
+  skipIfUnchanged?: boolean;
+}
+
 /**
  * 快照服务
  * 负责快照的生成、管理和清理
@@ -23,7 +28,7 @@ export class SnapshotService {
    * 创建快照
    * 从 extension 内存态复制数据到 snapshots 归档
    */
-  public async createSnapshot(options?: { refreshCurrentState?: boolean }): Promise<Snapshot> {
+  public async createSnapshot(options?: CreateSnapshotOptions): Promise<Snapshot> {
     if (options?.refreshCurrentState) {
       await this.sessionSource.fullCapture();
     }
@@ -60,10 +65,19 @@ export class SnapshotService {
       tabs: activeTabs.map((tab) => ({ ...tab })),
     };
 
+    const settings = await this.repository.getSettings();
+    if (options?.skipIfUnchanged) {
+      const latestEquivalent = await this.getLatestEquivalentSnapshot(snapshot, settings.snapshot?.retentionHours);
+      if (latestEquivalent) {
+        await this.enforceSnapshotRetention(settings.snapshot?.retentionHours);
+        return latestEquivalent;
+      }
+    }
+
     await this.repository.saveSnapshot(snapshot);
 
-    // 清理过期快照
-    await this.enforceSnapshotLimit();
+    // 清理超过保留时间的快照
+    await this.enforceSnapshotRetention(settings.snapshot?.retentionHours);
 
     return snapshot;
   }
@@ -113,20 +127,75 @@ export class SnapshotService {
     };
   }
 
-  /**
-   * 清理过期快照
-   */
-  public async enforceSnapshotLimit(maxSnapshots?: number) {
-    const configuredLimit = (await this.repository.getSettings()).snapshot?.maxSnapshots;
-    const limit = maxSnapshots ?? configuredLimit ?? 20;
+  private getSnapshotSignature(snapshot: Pick<SnapshotDetail, 'windows' | 'tabs'>): string {
+    const windowPositions = new Map(
+      snapshot.windows
+        .slice()
+        .sort((left, right) => left.snapIndex - right.snapIndex)
+        .map((window, index) => [window.windowId, index])
+    );
 
-    const snapshots = await this.getSnapshots(100);
-    if (snapshots.length > limit) {
-      const toDelete = snapshots.slice(limit);
-      for (const snapshot of toDelete) {
-        await this.deleteSnapshot(snapshot.id);
-      }
+    return snapshot.tabs
+      .filter((tab) => !tab.deletedAt)
+      .slice()
+      .sort((left, right) => {
+        const leftWindow = windowPositions.get(left.windowId) ?? Number.MAX_SAFE_INTEGER;
+        const rightWindow = windowPositions.get(right.windowId) ?? Number.MAX_SAFE_INTEGER;
+        if (leftWindow !== rightWindow) return leftWindow - rightWindow;
+        if (left.tabIndex !== right.tabIndex) return left.tabIndex - right.tabIndex;
+        return left.url.localeCompare(right.url);
+      })
+      .map((tab) => {
+        const windowPosition = windowPositions.get(tab.windowId) ?? -1;
+        return [windowPosition, tab.tabIndex, tab.isPinned ? 1 : 0, tab.url].join('\t');
+      })
+      .join('\n');
+  }
+
+  private async getLatestEquivalentSnapshot(
+    snapshot: SnapshotDetail,
+    retentionHours?: number
+  ): Promise<Snapshot | null> {
+    const latest = (await this.repository.getSnapshots(1))[0];
+    if (!latest) {
+      return null;
     }
+
+    const retentionMs = (retentionHours ?? 24) * 60 * 60 * 1000;
+    if (Date.now() - latest.createdAt >= retentionMs) {
+      return null;
+    }
+
+    const detail = await this.repository.getSnapshotDetail(latest.id);
+    if (!detail) {
+      return null;
+    }
+
+    return this.getSnapshotSignature(snapshot) === this.getSnapshotSignature(detail)
+      ? latest
+      : null;
+  }
+
+  /**
+   * 清理超过保留时间的快照
+   */
+  public async enforceSnapshotRetention(retentionHours?: number) {
+    const configuredRetentionHours = (await this.repository.getSettings()).snapshot?.retentionHours;
+    const hours = retentionHours ?? configuredRetentionHours ?? 24;
+    const cutoff = Date.now() - hours * 60 * 60 * 1000;
+
+    const snapshots = await this.getSnapshots(1000);
+    const expired = snapshots.filter((snapshot) => snapshot.createdAt < cutoff);
+    for (const snapshot of expired) {
+      await this.deleteSnapshot(snapshot.id);
+    }
+  }
+
+  /**
+   * @deprecated maxSnapshots 现在表示展示数量；实际清理由 retentionHours 控制。
+   */
+  public async enforceSnapshotLimit() {
+    await this.enforceSnapshotRetention();
   }
 
   /**

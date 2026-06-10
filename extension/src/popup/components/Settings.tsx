@@ -30,7 +30,7 @@ const defaultSettings: SettingsType = {
       ssl: false,
     },
   },
-  snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
+  snapshot: { maxSnapshots: 5, autoSaveInterval: 5, retentionHours: 24 },
   ui: { showRecoveryPromptOnStartup: false },
 };
 
@@ -69,6 +69,7 @@ function normalizeSettings(value?: Partial<SettingsType>): SettingsType {
     snapshot: {
       maxSnapshots: value?.snapshot?.maxSnapshots ?? defaultSettings.snapshot.maxSnapshots,
       autoSaveInterval: value?.snapshot?.autoSaveInterval ?? defaultSettings.snapshot.autoSaveInterval,
+      retentionHours: value?.snapshot?.retentionHours ?? defaultSettings.snapshot.retentionHours,
     },
     ui: {
       showRecoveryPromptOnStartup:
@@ -218,8 +219,8 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
           <div className="setting-item setting-card">
             <div className="setting-card-body">
               <div className="setting-card-copy">
-                <strong>最大保留快照数量</strong>
-                <p className="hint">控制历史快照列表的上限。超过上限时，会自动删除更旧的快照。</p>
+                <strong>页面展示快照数量</strong>
+                <p className="hint">只控制弹窗里显示多少条历史记录，不影响数据库实际留存。</p>
               </div>
               <input
                 type="number"
@@ -228,12 +229,36 @@ export default function Settings({ onBack, onSave }: SettingsProps) {
                 onChange={(e) =>
                   setSettings({
                     ...settings,
-                    snapshot: { ...settings.snapshot, maxSnapshots: parseInt(e.target.value) || 20 },
+                    snapshot: { ...settings.snapshot, maxSnapshots: parseInt(e.target.value) || 5 },
                   })
                 }
                 min="1"
                 max="100"
               />
+            </div>
+          </div>
+          <div className="setting-item setting-card">
+            <div className="setting-card-body">
+              <div className="setting-card-copy">
+                <strong>实际留存时间</strong>
+                <p className="hint">超过这个时间的快照会在保存新快照时清理。24 小时表示保留 1 天。</p>
+              </div>
+              <div className="setting-inline-input">
+                <input
+                  type="number"
+                  className="input setting-number-input"
+                  value={settings.snapshot.retentionHours}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      snapshot: { ...settings.snapshot, retentionHours: parseInt(e.target.value) || 24 },
+                    })
+                  }
+                  min="1"
+                  max="168"
+                />
+                <span className="setting-inline-suffix">小时</span>
+              </div>
             </div>
           </div>
           <div className="setting-item setting-card setting-item-highlight">

@@ -410,7 +410,7 @@ export class SqliteStorage {
     return {
       dedup: { strategy: 'per-window' },
       storage: { level: 2 },
-      snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
+      snapshot: { maxSnapshots: 5, autoSaveInterval: 5, retentionHours: 24 },
       cleanup: { deletedRetentionDays: 30, autoCleanupEnabled: true },
       ui: { showRecoveryPromptOnStartup: false },
     };

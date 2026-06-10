@@ -26,12 +26,12 @@ export class Level1Repository implements StorageRepository {
   }
 
   async getSnapshotDetail(id: string): Promise<SnapshotDetail | null> {
-    const snapshots = await this.getSnapshots(100);
+    const snapshots = await this.getSnapshots(1000);
     return (snapshots.find((s) => s.id === id) as SnapshotDetail) || null;
   }
 
   async saveSnapshot(snapshot: SnapshotDetail): Promise<void> {
-    const snapshots = await this.getSnapshots(100);
+    const snapshots = await this.getSnapshots(1000);
     snapshots.unshift(snapshot);
     await chrome.storage.local.set({
       [this.STORAGE_KEY_SNAPSHOTS]: snapshots,
@@ -39,22 +39,23 @@ export class Level1Repository implements StorageRepository {
   }
 
   async deleteSnapshot(id: string): Promise<void> {
-    const snapshots = await this.getSnapshots(100);
+    const snapshots = await this.getSnapshots(1000);
     const filtered = snapshots.filter((s) => s.id !== id);
     await chrome.storage.local.set({
       [this.STORAGE_KEY_SNAPSHOTS]: filtered,
     });
   }
 
-  async getPopupState(limit: number = 20): Promise<{ snapshots: Snapshot[]; settings: Settings }> {
+  async getPopupState(limit?: number): Promise<{ snapshots: Snapshot[]; settings: Settings }> {
     const result = await chrome.storage.local.get([
       this.STORAGE_KEY_SNAPSHOTS,
       this.STORAGE_KEY_SETTINGS,
     ]);
+    const settings = this.mergeSettings(result[this.STORAGE_KEY_SETTINGS] as Settings | undefined);
+    const displayLimit = limit ?? settings.snapshot.maxSnapshots;
     const snapshots = ((result[this.STORAGE_KEY_SNAPSHOTS] || []) as Snapshot[])
       .sort((a, b) => b.createdAt - a.createdAt)
-      .slice(0, limit);
-    const settings = this.mergeSettings(result[this.STORAGE_KEY_SETTINGS] as Settings | undefined);
+      .slice(0, displayLimit);
     return { snapshots, settings };
   }
 
@@ -73,7 +74,7 @@ export class Level1Repository implements StorageRepository {
     return {
       dedup: { strategy: 'per-window' },
       storage: { level: 1 },
-      snapshot: { maxSnapshots: 20, autoSaveInterval: 5 },
+      snapshot: { maxSnapshots: 5, autoSaveInterval: 5, retentionHours: 24 },
       ui: { showRecoveryPromptOnStartup: false },
     };
   }
